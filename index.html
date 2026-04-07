@@ -1,0 +1,867 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spring 2026 Wednesday Dart League</title>
+<style>
+  :root {
+    --cl-red: #C8102E;
+    --cl-dark: #1C1C1C;
+    --cl-gray: #4A4A4A;
+    --cl-light: #F2F2F2;
+    --cl-white: #FFFFFF;
+    --cl-red-light: #fde8ec;
+    --border: #ddd;
+    --muted: #6b7280;
+    --green: #22c55e;
+    --yellow: #f59e0b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: var(--cl-light); color: var(--cl-dark); }
+
+  header {
+    background: var(--cl-dark);
+    color: white;
+    padding: 18px 28px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .header-left h1 { font-size: 1.2rem; font-weight: 700; }
+  .header-left p { font-size: 0.78rem; opacity: 0.65; margin-top: 2px; }
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .canlift-badge {
+    background: var(--cl-red);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+    transition: background 0.2s;
+  }
+  .canlift-badge:hover { background: #a50d25; }
+  .canlift-badge.active-tab-btn { outline: 2px solid white; outline-offset: 2px; }
+
+  .sync-indicator {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.8);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .sync-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #aaa;
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .sync-dot.syncing { background: var(--yellow); animation: pulse 1s infinite; }
+  .sync-dot.synced { background: var(--green); }
+  .sync-dot.error { background: #f87171; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  nav {
+    background: var(--cl-white);
+    border-bottom: 2px solid var(--border);
+    display: flex;
+    padding: 0 20px;
+    overflow-x: auto;
+  }
+  nav button {
+    background: none;
+    border: none;
+    padding: 14px 20px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--muted);
+    border-bottom: 3px solid transparent;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  nav button.active { color: var(--cl-red); border-bottom-color: var(--cl-red); }
+  nav button:hover { color: var(--cl-red); }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 20px; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .date-selector { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  .date-btn {
+    background: white;
+    border: 2px solid var(--border);
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 600;
+    transition: all 0.2s;
+    color: var(--cl-dark);
+  }
+  .date-btn.active { background: var(--cl-dark); color: white; border-color: var(--cl-dark); }
+  .date-btn:hover:not(.active) { border-color: var(--cl-red); color: var(--cl-red); }
+  .date-btn.past { opacity: 0.5; }
+
+  .schedule-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  .match-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: box-shadow 0.2s;
+  }
+  .match-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+  .board-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .match-record-pill {
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--cl-red-light);
+    color: var(--cl-red);
+  }
+  .match-teams { display: flex; align-items: center; gap: 10px; }
+  .team-chip {
+    flex: 1;
+    background: var(--cl-light);
+    border-radius: 8px;
+    padding: 8px 10px;
+    text-align: center;
+  }
+  .team-chip .team-num { font-size: 0.68rem; color: var(--muted); font-weight: 600; }
+  .team-chip .team-name { font-size: 0.8rem; font-weight: 700; line-height: 1.2; margin-top: 2px; }
+  .team-chip .captain-name { font-size: 0.7rem; color: var(--muted); margin-top: 3px; }
+  .vs-badge { font-size: 0.75rem; font-weight: 800; color: var(--muted); flex-shrink: 0; }
+
+  .search-bar {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    font-size: 0.95rem;
+    margin-bottom: 8px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-bar:focus { border-color: var(--cl-red); }
+  .note-text { font-size: 0.72rem; color: var(--muted); font-style: italic; margin-bottom: 14px; }
+  .teams-table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; background: white; }
+  thead { background: var(--cl-dark); color: white; }
+  th { padding: 12px 14px; text-align: left; font-size: 0.82rem; font-weight: 700; white-space: nowrap; }
+  td { padding: 11px 14px; font-size: 0.83rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafafa; }
+  .num-badge {
+    display: inline-block;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--cl-gray);
+    color: white;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-align: center;
+    line-height: 28px;
+  }
+  .wlt-cell { font-weight: 700; font-size: 0.85rem; }
+  .wlt-cell .w { color: var(--green); }
+  .wlt-cell .l { color: var(--cl-red); }
+  .wlt-cell .t { color: var(--yellow); }
+  .wlt-cell .dash { color: #ccc; }
+
+  .canlift-header-bar {
+    background: var(--cl-dark);
+    color: white;
+    border-radius: 12px;
+    padding: 18px 22px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .canlift-header-bar h2 { font-size: 1.15rem; font-weight: 800; }
+  .canlift-header-bar p { font-size: 0.8rem; opacity: 0.75; margin-top: 3px; }
+  .cl-accent { color: var(--cl-red); }
+
+  .quick-summary {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .qs-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 20px;
+    flex: 1;
+    min-width: 120px;
+    text-align: center;
+  }
+  .qs-card .qs-val { font-size: 1.8rem; font-weight: 800; }
+  .qs-card .qs-lbl { font-size: 0.72rem; color: var(--muted); margin-top: 3px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .qs-card.qs-w .qs-val { color: var(--green); }
+  .qs-card.qs-l .qs-val { color: var(--cl-red); }
+  .qs-card.qs-t .qs-val { color: var(--yellow); }
+  .qs-card.qs-pct .qs-val { color: var(--cl-dark); font-size: 1.5rem; }
+
+  .schedule-list { display: flex; flex-direction: column; gap: 12px; }
+  .schedule-item {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .schedule-item.past { opacity: 0.65; }
+  .date-block {
+    text-align: center;
+    min-width: 64px;
+    background: var(--cl-red);
+    color: white;
+    border-radius: 8px;
+    padding: 8px 6px;
+    flex-shrink: 0;
+  }
+  .date-block .day { font-size: 1.3rem; font-weight: 800; }
+  .date-block .month { font-size: 0.65rem; font-weight: 600; text-transform: uppercase; }
+  .schedule-item.past .date-block { background: var(--muted); }
+
+  .match-info { flex: 1; }
+  .match-info .opponent { font-size: 0.95rem; font-weight: 700; }
+  .match-info .details { font-size: 0.76rem; color: var(--muted); margin-top: 3px; }
+
+  .h2h-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--cl-light);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-top: 4px;
+    color: var(--cl-gray);
+  }
+  .h2h-badge.has-record { background: var(--cl-red-light); border-color: var(--cl-red); color: var(--cl-red); }
+
+  .score-games { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+  .score-game-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+  }
+  .score-game-row .gname { flex: 1; color: var(--cl-gray); font-weight: 600; }
+  .score-btns { display: flex; gap: 4px; }
+  .score-btn {
+    padding: 3px 10px;
+    border-radius: 6px;
+    border: 1.5px solid var(--border);
+    cursor: pointer;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: white;
+    transition: all 0.15s;
+  }
+  .score-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .score-btn.win { border-color: var(--green); color: var(--green); }
+  .score-btn.win.selected { background: var(--green); color: white; }
+  .score-btn.loss { border-color: var(--cl-red); color: var(--cl-red); }
+  .score-btn.loss.selected { background: var(--cl-red); color: white; }
+  .score-btn.tie { border-color: var(--yellow); color: var(--yellow); }
+  .score-btn.tie.selected { background: var(--yellow); color: white; }
+
+  .night-summary {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    font-size: 0.74rem;
+    color: var(--muted);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .night-summary .ns-label { font-weight: 600; }
+  .night-summary .ns-w { color: var(--green); font-weight: 700; }
+  .night-summary .ns-l { color: var(--cl-red); font-weight: 700; }
+  .night-summary .ns-t { color: var(--yellow); font-weight: 700; }
+
+  .next-match-banner {
+    background: linear-gradient(135deg, var(--cl-red), #8b0d1f);
+    color: white;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .next-match-banner .nm-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.8; }
+  .next-match-banner .nm-opp { font-size: 1rem; font-weight: 800; margin-top: 2px; }
+  .next-match-banner .nm-details { font-size: 0.78rem; opacity: 0.85; margin-top: 2px; }
+
+  .loading-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(28,28,28,0.7);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 999;
+    color: white;
+    font-size: 1rem;
+    font-weight: 700;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .loading-spinner {
+    width: 36px; height: 36px;
+    border: 4px solid rgba(255,255,255,0.3);
+    border-top-color: var(--cl-red);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div>Loading scores from Google Sheets...</div>
+</div>
+
+<header>
+  <div class="header-left">
+    <div style="font-size:1.6rem">🎯</div>
+    <div>
+      <h1>Spring 2026 Wednesday Dart League</h1>
+      <p>30 Teams · 10 Match Nights · April 9 – June 10, 2026</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="sync-indicator" id="syncIndicator">
+      <div class="sync-dot" id="syncDot"></div>
+      <span id="syncText">Connecting...</span>
+    </div>
+    <button class="canlift-badge" id="canliftHeaderBtn" onclick="showTabByName('canlift')">
+      🎯 CanLift #21
+    </button>
+  </div>
+</header>
+
+<nav>
+  <button id="navSchedule" class="active" onclick="showTabByName('schedule', event)">📅 Schedule</button>
+  <button id="navTeams" onclick="showTabByName('teams', event)">👥 All Teams</button>
+</nav>
+
+<div class="container">
+
+  <!-- SCHEDULE TAB -->
+  <div id="tab-schedule" class="tab-content active">
+    <div class="date-selector" id="dateSelector"></div>
+    <div class="schedule-grid" id="scheduleGrid"></div>
+  </div>
+
+  <!-- TEAMS TAB -->
+  <div id="tab-teams" class="tab-content">
+    <input class="search-bar" type="text" placeholder="🔍 Search teams, captains, or companies..." oninput="filterTeams(this.value)">
+    <p class="note-text">W / L / T columns reflect results vs. CanLift only. Teams not scheduled against CanLift show —</p>
+    <div class="teams-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Team Name</th>
+            <th>Captain(s)</th>
+            <th>W</th>
+            <th>L</th>
+            <th>T</th>
+            <th>Win %</th>
+          </tr>
+        </thead>
+        <tbody id="teamsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- CANLIFT TAB -->
+  <div id="tab-canlift" class="tab-content">
+    <div class="canlift-header-bar">
+      <div style="font-size:1.8rem">🎯</div>
+      <div>
+        <h2>CanLift Technologies — <span class="cl-accent">Team #21</span></h2>
+        <p>Captain: Aaron Barr &nbsp;|&nbsp; aaron@canliftech.com</p>
+      </div>
+    </div>
+
+    <div id="nextMatchBanner"></div>
+
+    <div class="quick-summary">
+      <div class="qs-card qs-w"><div class="qs-val" id="qsW">—</div><div class="qs-lbl">Wins</div></div>
+      <div class="qs-card qs-l"><div class="qs-val" id="qsL">—</div><div class="qs-lbl">Losses</div></div>
+      <div class="qs-card qs-t"><div class="qs-val" id="qsT">—</div><div class="qs-lbl">Ties</div></div>
+      <div class="qs-card qs-pct"><div class="qs-val" id="qsPct">—</div><div class="qs-lbl">Win %</div></div>
+    </div>
+
+    <div class="schedule-list" id="canliftSchedule"></div>
+  </div>
+
+</div>
+
+<script>
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyH_rg9fnUTblv3RU8J6uJx4Weu_dbH1o0gbPHubDn1_kgW9RHVDK5U19Ivjrki3z75/exec";
+
+const TEAMS = [
+  { number: 1, name: "Derrick International / Newpark Drilling Fluids", captain: "Todd Iverson / Joe Grant", email: "jaziconsultant@outlook.com / jgrant1@newpark.com" },
+  { number: 2, name: "Johnson Controls", captain: "Marcus Lloyd", email: "marcus.t.lloyd@jci.com" },
+  { number: 3, name: "Magnum Cement", captain: "Scott Connolly", email: "scott.connolly@magnumcement.ca" },
+  { number: 4, name: "Steelhaus Canada / Phoenix Energy", captain: "Tyler Patrick / Ashley Hayes", email: "tpatrick@steelhausinc.com / ashley.hayes@phoenixenergy.ca" },
+  { number: 5, name: "4th Resources / Mobile Energy", captain: "Greg Chapin / Dan Shermerhorn", email: "greg.chapin@4thresource.ca / dan@mobileenergy.ca" },
+  { number: 6, name: "Kemko / UniqEnergy", captain: "Jamie Petrovic / Ross Hagen", email: "jpetrovic@kemko.ca / rhagen@uniqenergy.com" },
+  { number: 7, name: "Interra Energy", captain: "Trevor Vaisler", email: "trevor.vaisler@interraenergy.com" },
+  { number: 8, name: "Darts of Hazard", captain: "Chris Hicks", email: "chris.hicks@telus.net" },
+  { number: 9, name: "Lufkin", captain: "Kori Muir", email: "kmuir@lufkin.com" },
+  { number: 10, name: "Titanium Energy / LHE Group", captain: "Dan Schuler / Chris Gylander", email: "dschuler@titanium-es.com / cgylander@lhe-group.com" },
+  { number: 11, name: "Sanjel Energy Services", captain: "Ryan Gauthier", email: "rgauthier@sanjel.com" },
+  { number: 12, name: "Peloton", captain: "Chris Anderson / Brett Spencer", email: "chrisprodview@gmail.com / brett.spencer@peloton.com" },
+  { number: 13, name: "Alpine Energy Services", captain: "Monty Leeds", email: "monty.leeds@alpineenergyservices.com" },
+  { number: 14, name: "Battle Darts", captain: "Shane Sutherland", email: "shane@brenergy.ca" },
+  { number: 15, name: "BakerHughes", captain: "Bunnita Leil", email: "bunnita.leil@bakerhughes.com" },
+  { number: 16, name: "Dans Oilfield Rentals", captain: "Shawn Leggett", email: "shawn.l@dansoilfieldrentals.ca" },
+  { number: 17, name: "Q2 Artificial Lift #2 / Stream Flo", captain: "Corey Eon / Chad Hannin", email: "ceon@q2als.com / channin@streamflo.com" },
+  { number: 18, name: "Total Oilfield Rentals", captain: "Travis Stephenson", email: "tstephenson@totaloilfield.ca" },
+  { number: 19, name: "Full Spectrum Projects", captain: "Sterling Street", email: "sstreet@fsproj.com" },
+  { number: 20, name: "Sicotte", captain: "Dave Herman", email: "dave.herman@sicottedrillingtools.com" },
+  { number: 21, name: "CanLift Technologies", captain: "Aaron Barr", email: "aaron@canliftech.com" },
+  { number: 22, name: "BioSqueeze / Tier 1 Energy", captain: "Sheena Halaburda / Chris Fairhurst", email: "shalaburda@biosqueeze.com / cfairhurst@tier1energy.ca" },
+  { number: 23, name: "Stimwrx / Prowler", captain: "Stephen Chapin / Steve Lund", email: "stephen.chapin@purechemservices.com / steve@prowlerenergy.com" },
+  { number: 24, name: "NOV Canada / NCS Fluid Systems", captain: "Robert Purvis / Toby Bird", email: "robert.purvis@nov.com / tbird@ncsfluidsystems.ca" },
+  { number: 25, name: "MANTL", captain: "Rick Joyes", email: "rick.joyes@mantl.ca" },
+  { number: 26, name: "True CDN Energy / Stealth Well Control", captain: "Glenn Osmak / Karl Bauer", email: "ozzie@tcnrg.ca / karl@stealthwell.ca" },
+  { number: 27, name: "Q2 Artificial Lift #1", captain: "Rob Jackson", email: "robjackson@q2als.com" },
+  { number: 28, name: "TKC Trucking", captain: "Murray McDonald", email: "murraymcdonald70@gmail.com" },
+  { number: 29, name: "SafetyBOSS / Go Time Rentals", captain: "Michele Morissette / Tyler Crooks", email: "mmorissette@safetyboss.com / tyler.crooks@gotimeenergy.ca" },
+  { number: 30, name: "ACI", captain: "Colin Mann", email: "cmann@advancingchem.com" }
+];
+
+const SCHEDULE = {
+  "09-Apr-26": [[1,1,16],[2,2,17],[3,3,18],[4,4,19],[5,5,20],[6,6,21],[7,7,22],[8,8,23],[9,9,24],[10,10,25],[11,11,26],[12,12,27],[13,13,28],[14,14,29],[15,15,30]],
+  "15-Apr-26": [[1,1,2],[2,3,16],[3,4,17],[4,5,18],[5,6,19],[6,7,20],[7,8,21],[8,9,22],[9,10,23],[10,11,24],[11,12,25],[12,13,26],[13,14,27],[14,15,28],[15,30,29]],
+  "22-Apr-26": [[1,29,28],[2,30,27],[3,15,26],[4,14,25],[5,13,24],[6,12,23],[7,11,22],[8,10,21],[9,9,20],[10,8,19],[11,7,18],[12,6,17],[13,5,16],[14,4,2],[15,1,3]],
+  "29-Apr-26": [[1,5,3],[2,6,2],[3,7,16],[4,8,17],[5,9,18],[6,10,19],[7,11,20],[8,12,21],[9,13,22],[10,1,4],[11,15,24],[12,30,25],[13,29,26],[14,28,27],[15,14,23]],
+  "06-May-26": [[1,6,4],[2,7,3],[3,8,2],[4,9,16],[5,1,5],[6,10,17],[7,12,19],[8,13,20],[9,11,18],[10,14,21],[11,30,23],[12,15,22],[13,28,25],[14,27,26],[15,24,29]],
+  "13-May-26": [[1,14,19],[2,13,18],[3,12,17],[4,16,11],[5,10,2],[6,9,3],[7,8,4],[8,7,5],[9,1,6],[10,25,26],[11,27,24],[12,28,23],[13,22,29],[14,21,30],[15,20,15]],
+  "20-May-26": [[1,1,7],[2,8,6],[3,9,5],[4,10,4],[5,11,3],[6,12,2],[7,13,16],[8,14,17],[9,15,18],[10,30,19],[11,29,20],[12,28,21],[13,27,22],[14,26,23],[15,24,25]],
+  "27-May-26": [[1,21,23],[2,20,24],[3,19,25],[4,18,26],[5,17,27],[6,16,28],[7,2,29],[8,3,30],[9,4,15],[10,5,14],[11,1,22],[12,6,13],[13,7,12],[14,8,11],[15,9,10]],
+  "03-Jun-26": [[1,20,22],[2,19,23],[3,18,24],[4,17,25],[5,16,26],[6,2,27],[7,3,28],[8,1,21],[9,5,30],[10,6,15],[11,4,29],[12,7,14],[13,8,13],[14,9,12],[15,10,11]],
+  "10-Jun-26": [[1,1,20],[2,17,23],[3,19,21],[4,18,22],[5,2,25],[6,16,24],[7,4,27],[8,3,26],[9,6,29],[10,5,28],[11,8,15],[12,7,30],[13,10,13],[14,11,12],[15,9,14]]
+};
+
+const GAMES = ["Cricket", "Cricket", "301", "501", "Baseball"];
+const CANLIFT_NUM = 21;
+
+let scores = {};
+let isSaving = false;
+
+// ---- Sync Status ----
+function setSyncStatus(state, text) {
+  const dot = document.getElementById('syncDot');
+  const label = document.getElementById('syncText');
+  dot.className = 'sync-dot ' + state;
+  label.textContent = text;
+}
+
+// ---- Google Sheets API ----
+async function loadScoresFromSheet() {
+  try {
+    setSyncStatus('syncing', 'Loading...');
+    const url = APPS_SCRIPT_URL + '?action=loadScores&t=' + Date.now();
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (data.success && data.scores) {
+      scores = data.scores;
+      setSyncStatus('synced', 'Synced');
+    } else {
+      setSyncStatus('error', 'Sheet error');
+      // Fall back to local db
+      await loadScoresLocal();
+    }
+  } catch (e) {
+    setSyncStatus('error', 'Offline – local only');
+    await loadScoresLocal();
+  }
+}
+
+async function saveScoreToSheet(matchKey, gameIdx, result) {
+  // Optimistic local save first
+  await saveScoresLocal();
+  setSyncStatus('syncing', 'Saving...');
+  try {
+    const resp = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'saveScore', matchKey, gameIdx, result })
+    });
+    const data = await resp.json();
+    if (data.success) {
+      setSyncStatus('synced', 'Saved ✓');
+    } else {
+      setSyncStatus('error', 'Save failed');
+    }
+  } catch (e) {
+    setSyncStatus('error', 'Offline – saved locally');
+  }
+}
+
+// ---- Local DB fallback ----
+async function loadScoresLocal() {
+  try {
+    const data = await window.db.get('canlift_scores_2026');
+    if (data && data.scores) scores = data.scores;
+  } catch(e) {}
+}
+
+async function saveScoresLocal() {
+  try {
+    await window.db.set('canlift_scores_2026', { scores });
+  } catch(e) {}
+}
+
+// ---- Data helpers ----
+function getTeam(num) { return TEAMS.find(t => t.number === num); }
+function isCanLift(num) { return num === CANLIFT_NUM; }
+
+function parseDate(dateStr) {
+  const parts = dateStr.split('-');
+  const months = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+  return new Date(parseInt('20'+parts[2]), months[parts[1]], parseInt(parts[0]));
+}
+
+function isPast(dateStr) {
+  const today = new Date('2026-04-07');
+  return parseDate(dateStr) < today;
+}
+
+function getCanLiftMatches() {
+  const matches = [];
+  Object.entries(SCHEDULE).forEach(([date, dayMatches]) => {
+    dayMatches.forEach(([board, t1, t2]) => {
+      if (isCanLift(t1) || isCanLift(t2)) {
+        const opponent = isCanLift(t1) ? t2 : t1;
+        matches.push({ date, board, opponent });
+      }
+    });
+  });
+  return matches;
+}
+
+function getMatchScores(matchKey) { return scores[matchKey] || {}; }
+
+function getMatchWLT(matchKey) {
+  const ms = getMatchScores(matchKey);
+  let w = 0, l = 0, t = 0;
+  GAMES.forEach((_, idx) => {
+    if (ms[idx] === 'W') w++;
+    else if (ms[idx] === 'L') l++;
+    else if (ms[idx] === 'T') t++;
+  });
+  return { w, l, t };
+}
+
+function getTeamWLT(teamNum) {
+  let w = 0, l = 0, t = 0;
+  getCanLiftMatches().forEach(({ date, opponent }) => {
+    if (opponent === teamNum) {
+      const matchKey = `${date}_${opponent}`;
+      const ms = getMatchScores(matchKey);
+      GAMES.forEach((_, idx) => {
+        if (ms[idx] === 'W') l++;
+        else if (ms[idx] === 'L') w++;
+        else if (ms[idx] === 'T') t++;
+      });
+    }
+  });
+  return { w, l, t };
+}
+
+function getOverallWLT() {
+  let w = 0, l = 0, t = 0;
+  Object.values(scores).forEach(matchScores => {
+    Object.values(matchScores).forEach(result => {
+      if (result === 'W') w++;
+      else if (result === 'L') l++;
+      else if (result === 'T') t++;
+    });
+  });
+  return { w, l, t };
+}
+
+function getH2HRecord(matchKey) {
+  const { w, l, t } = getMatchWLT(matchKey);
+  const total = w + l + t;
+  if (total === 0) return null;
+  return `${w}-${l}-${t}`;
+}
+
+// ---- Score setting ----
+async function setScore(matchKey, gameIdx, result) {
+  if (isSaving) return;
+  isSaving = true;
+
+  if (!scores[matchKey]) scores[matchKey] = {};
+  if (scores[matchKey][gameIdx] === result) {
+    delete scores[matchKey][gameIdx];
+    result = '';
+  } else {
+    scores[matchKey][gameIdx] = result;
+  }
+
+  updateAllDisplays();
+  await saveScoreToSheet(matchKey, gameIdx, result);
+  isSaving = false;
+}
+
+function updateAllDisplays() {
+  updateQuickSummary();
+  renderSchedule();
+  renderTeams();
+  renderCanLiftSchedule();
+  renderNextMatch();
+}
+
+function updateQuickSummary() {
+  const { w, l, t } = getOverallWLT();
+  const total = w + l + t;
+  const pct = total > 0 ? Math.round((w / total) * 100) + '%' : '—';
+  document.getElementById('qsW').textContent = total > 0 ? w : '—';
+  document.getElementById('qsL').textContent = total > 0 ? l : '—';
+  document.getElementById('qsT').textContent = total > 0 ? t : '—';
+  document.getElementById('qsPct').textContent = pct;
+}
+
+function renderNextMatch() {
+  const banner = document.getElementById('nextMatchBanner');
+  const today = new Date('2026-04-07');
+  const clMatches = getCanLiftMatches();
+  const next = clMatches.find(m => parseDate(m.date) >= today);
+  if (!next) { banner.innerHTML = ''; return; }
+  const opp = getTeam(next.opponent);
+  banner.innerHTML = `
+    <div class="next-match-banner">
+      <div style="font-size:1.8rem;flex-shrink:0">🎯</div>
+      <div>
+        <div class="nm-label">Next Match</div>
+        <div class="nm-opp">vs. ${opp ? opp.name : 'Team '+next.opponent}</div>
+        <div class="nm-details">${next.date} &nbsp;·&nbsp; Board ${next.board} &nbsp;·&nbsp; ${opp ? opp.captain : ''}</div>
+      </div>
+    </div>
+  `;
+}
+
+// ---- Schedule Tab ----
+let activeDate = Object.keys(SCHEDULE)[0];
+
+function buildDateSelector() {
+  const container = document.getElementById('dateSelector');
+  Object.keys(SCHEDULE).forEach(date => {
+    const btn = document.createElement('button');
+    btn.className = 'date-btn' + (date === activeDate ? ' active' : '') + (isPast(date) ? ' past' : '');
+    btn.textContent = date;
+    btn.onclick = () => {
+      activeDate = date;
+      document.querySelectorAll('.date-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderSchedule();
+    };
+    container.appendChild(btn);
+  });
+}
+
+function renderSchedule() {
+  const grid = document.getElementById('scheduleGrid');
+  grid.innerHTML = '';
+  const matches = SCHEDULE[activeDate];
+  matches.forEach(([board, t1, t2]) => {
+    const team1 = getTeam(t1);
+    const team2 = getTeam(t2);
+
+    const isClMatch = isCanLift(t1) || isCanLift(t2);
+    let clMatchRecord = null;
+    if (isClMatch) {
+      const oppNum = isCanLift(t1) ? t2 : t1;
+      const mk = `${activeDate}_${oppNum}`;
+      clMatchRecord = getH2HRecord(mk);
+    }
+
+    const card = document.createElement('div');
+    card.className = 'match-card';
+    card.innerHTML = `
+      <div class="board-label">
+        🎯 Board ${board}
+        ${clMatchRecord ? `<span class="match-record-pill">${clMatchRecord}</span>` : ''}
+      </div>
+      <div class="match-teams">
+        <div class="team-chip">
+          <div class="team-num">Team #${t1}</div>
+          <div class="team-name">${team1 ? team1.name : 'Team '+t1}</div>
+          <div class="captain-name">${team1 ? team1.captain : ''}</div>
+        </div>
+        <div class="vs-badge">VS</div>
+        <div class="team-chip">
+          <div class="team-num">Team #${t2}</div>
+          <div class="team-name">${team2 ? team2.name : 'Team '+t2}</div>
+          <div class="captain-name">${team2 ? team2.captain : ''}</div>
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+// ---- Teams Tab ----
+const clOpponents = new Set(getCanLiftMatches().map(m => m.opponent));
+
+function renderTeams(filter = '') {
+  const tbody = document.getElementById('teamsBody');
+  tbody.innerHTML = '';
+  const f = filter.toLowerCase();
+  TEAMS.filter(t =>
+    !f || t.name.toLowerCase().includes(f) || t.captain.toLowerCase().includes(f) || t.email.toLowerCase().includes(f)
+  ).forEach(t => {
+    const hasPlayed = clOpponents.has(t.number);
+    let wHtml = '<span class="dash">—</span>';
+    let lHtml = '<span class="dash">—</span>';
+    let tHtml = '<span class="dash">—</span>';
+    let pctHtml = '<span class="dash">—</span>';
+
+    if (hasPlayed) {
+      const { w, l, t: ties } = getTeamWLT(t.number);
+      const total = w + l + ties;
+      wHtml = `<span class="w">${w}</span>`;
+      lHtml = `<span class="l">${l}</span>`;
+      tHtml = `<span class="t">${ties}</span>`;
+      pctHtml = total > 0 ? `${Math.round((w/total)*100)}%` : '0%';
+    }
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="num-badge">${t.number}</span></td>
+      <td><strong>${t.name}</strong></td>
+      <td>${t.captain}</td>
+      <td class="wlt-cell">${wHtml}</td>
+      <td class="wlt-cell">${lHtml}</td>
+      <td class="wlt-cell">${tHtml}</td>
+      <td class="wlt-cell" style="color:var(--cl-gray)">${pctHtml}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function filterTeams(val) { renderTeams(val); }
+
+// ---- CanLift Schedule ----
+function renderCanLiftSchedule() {
+  const listEl = document.getElementById('canliftSchedule');
+  listEl.innerHTML = '';
+  const clMatches = getCanLiftMatches();
+
+  clMatches.forEach(({ date, board, opponent }) => {
+    const opp = getTeam(opponent);
+    const past = isPast(date);
+    const parts = date.split('-');
+    const matchKey = `${date}_${opponent}`;
+    const matchScores = getMatchScores(matchKey);
+    const { w, l, t } = getMatchWLT(matchKey);
+    const h2h = getH2HRecord(matchKey);
+
+    const item = document.createElement('div');
+    item.className = 'schedule-item' + (past ? ' past' : '');
+    item.innerHTML = `
+      <div class="date-block">
+        <div class="day">${parts[0]}</div>
+        <div class="month">${parts[1]} '${parts[2]}</div>
+      </div>
+      <div class="match-info" style="flex:1">
+        <div class="opponent">
+          vs. ${opp ? opp.name : 'Team '+opponent}
+          <span style="color:#aaa;font-weight:400;font-size:0.8rem">(#${opponent})</span>
+        </div>
+        <div class="details">📋 Board ${board} &nbsp;|&nbsp; 👤 ${opp ? opp.captain : ''}</div>
+        <div class="${h2h ? 'h2h-badge has-record' : 'h2h-badge'}">${h2h ? 'Record: '+h2h : 'No results yet'}</div>
+        <div class="score-games" id="score-${matchKey}">
+          ${GAMES.map((game, idx) => `
+            <div class="score-game-row" data-game="${idx}">
+              <span class="gname">${game}</span>
+              <div class="score-btns">
+                <button class="score-btn win${matchScores[idx] === 'W' ? ' selected' : ''}" onclick="setScore('${matchKey}', ${idx}, 'W')">W</button>
+                <button class="score-btn loss${matchScores[idx] === 'L' ? ' selected' : ''}" onclick="setScore('${matchKey}', ${idx}, 'L')">L</button>
+                <button class="score-btn tie${matchScores[idx] === 'T' ? ' selected' : ''}" onclick="setScore('${matchKey}', ${idx}, 'T')">T</button>
+              </div>
+            </div>
+          `).join('')}
+          <div class="night-summary">
+            <span class="ns-label">Night:</span>
+            <span class="ns-w">W: ${w}</span>
+            <span class="ns-l">L: ${l}</span>
+            <span class="ns-t">T: ${t}</span>
+          </div>
+        </div>
+      </div>
+      ${past ? '<div style="font-size:0.72rem;color:#aaa;font-weight:600;align-self:center;flex-shrink:0">COMPLETED</div>' : ''}
+    `;
+    listEl.appendChild(item);
+  });
+}
+
+// ---- Tab switching ----
+function showTabByName(name, event) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(btn => btn.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'schedule') document.getElementById('navSchedule').classList.add('active');
+  else if (name === 'teams') document.getElementById('navTeams').classList.add('active');
+  if (name === 'canlift') {
+    document.getElementById('canliftHeaderBtn').classList.add('active-tab-btn');
+  } else {
+    document.getElementById('canliftHeaderBtn').classList.remove('active-tab-btn');
+  }
+}
+
+// ---- Init ----
+async function init() {
+  await loadScoresFromSheet();
+  document.getElementById('loadingOverlay').style.display = 'none';
+  buildDateSelector();
+  renderSchedule();
+  renderTeams();
+  renderCanLiftSchedule();
+  renderNextMatch();
+  updateQuickSummary();
+}
+
+init();
+</script>
+</body>
+</html>
