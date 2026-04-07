@@ -24,7 +24,7 @@
   header {
     background: var(--cl-dark);
     color: white;
-    padding: 18px 28px;
+    padding: 16px 28px;
     display: flex;
     align-items: center;
     gap: 16px;
@@ -33,7 +33,8 @@
   .header-left { display: flex; align-items: center; gap: 12px; }
   .header-left h1 { font-size: 1.2rem; font-weight: 700; }
   .header-left p { font-size: 0.78rem; opacity: 0.65; margin-top: 2px; }
-  .header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .header-right { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+
   .canlift-badge {
     background: var(--cl-red);
     color: white;
@@ -44,32 +45,29 @@
     cursor: pointer;
     border: none;
     transition: background 0.2s;
+    white-space: nowrap;
   }
   .canlift-badge:hover { background: #a50d25; }
   .canlift-badge.active-tab-btn { outline: 2px solid white; outline-offset: 2px; }
 
-  .sync-indicator {
-    font-size: 0.72rem;
-    font-weight: 600;
-    padding: 4px 10px;
-    border-radius: 12px;
-    background: rgba(255,255,255,0.15);
-    color: rgba(255,255,255,0.8);
+  .last-refreshed {
+    font-size: 0.68rem;
+    color: rgba(255,255,255,0.5);
+    text-align: right;
     display: flex;
     align-items: center;
     gap: 5px;
   }
-  .sync-dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: #aaa;
-    flex-shrink: 0;
-    transition: background 0.3s;
+  .refresh-btn {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.5);
+    cursor: pointer;
+    font-size: 0.75rem;
+    padding: 0;
+    transition: color 0.2s;
   }
-  .sync-dot.syncing { background: var(--yellow); animation: pulse 1s infinite; }
-  .sync-dot.synced { background: var(--green); }
-  .sync-dot.error { background: #f87171; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .refresh-btn:hover { color: white; }
 
   nav {
     background: var(--cl-white);
@@ -152,7 +150,32 @@
   .team-chip .team-num { font-size: 0.68rem; color: var(--muted); font-weight: 600; }
   .team-chip .team-name { font-size: 0.8rem; font-weight: 700; line-height: 1.2; margin-top: 2px; }
   .team-chip .captain-name { font-size: 0.7rem; color: var(--muted); margin-top: 3px; }
-  .vs-badge { font-size: 0.75rem; font-weight: 800; color: var(--muted); flex-shrink: 0; }
+  /* Subtle W display — same size as team-num, not bold, dark/red */
+  .team-chip .team-wins {
+    font-size: 0.68rem;
+    font-weight: 400;
+    color: var(--cl-red);
+    margin-top: 3px;
+  }
+
+  .vs-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .vs-badge { font-size: 0.75rem; font-weight: 800; color: var(--muted); }
+  .tie-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
+    border-radius: 6px;
+    padding: 1px 6px;
+    white-space: nowrap;
+  }
 
   .search-bar {
     width: 100%;
@@ -288,7 +311,6 @@
     background: white;
     transition: all 0.15s;
   }
-  .score-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .score-btn.win { border-color: var(--green); color: var(--green); }
   .score-btn.win.selected { background: var(--green); color: white; }
   .score-btn.loss { border-color: var(--cl-red); color: var(--cl-red); }
@@ -325,32 +347,34 @@
   .next-match-banner .nm-opp { font-size: 1rem; font-weight: 800; margin-top: 2px; }
   .next-match-banner .nm-details { font-size: 0.78rem; opacity: 0.85; margin-top: 2px; }
 
-  .loading-overlay {
-    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(28,28,28,0.7);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 999;
+  .save-toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--cl-dark);
     color: white;
-    font-size: 1rem;
-    font-weight: 700;
-    flex-direction: column;
-    gap: 12px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.3s ease;
+    z-index: 999;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
-  .loading-spinner {
-    width: 36px; height: 36px;
-    border: 4px solid rgba(255,255,255,0.3);
-    border-top-color: var(--cl-red);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  .save-toast.show { transform: translateY(0); opacity: 1; }
+  .save-toast .toast-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
 </style>
 </head>
 <body>
 
-<div class="loading-overlay" id="loadingOverlay">
-  <div class="loading-spinner"></div>
-  <div>Loading scores from Google Sheets...</div>
+<div class="save-toast" id="saveToast">
+  <div class="toast-dot" id="toastDot"></div>
+  <span id="toastMsg">Saved</span>
 </div>
 
 <header>
@@ -362,13 +386,13 @@
     </div>
   </div>
   <div class="header-right">
-    <div class="sync-indicator" id="syncIndicator">
-      <div class="sync-dot" id="syncDot"></div>
-      <span id="syncText">Connecting...</span>
-    </div>
     <button class="canlift-badge" id="canliftHeaderBtn" onclick="showTabByName('canlift')">
       🎯 CanLift #21
     </button>
+    <div class="last-refreshed">
+      <span id="lastRefreshedText">Loading...</span>
+      <button class="refresh-btn" onclick="manualRefresh()" title="Refresh scores">↻</button>
+    </div>
   </div>
 </header>
 
@@ -432,8 +456,6 @@
 </div>
 
 <script>
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyTMUIrc_3sGX5pBAWI7jvAjUng8Orx-nliDDLhzDB-kX8fZlli9Vz4lviq5FI2nRRl/exec";
-
 const TEAMS = [
   { number: 1, name: "Derrick International / Newpark Drilling Fluids", captain: "Todd Iverson / Joe Grant", email: "jaziconsultant@outlook.com / jgrant1@newpark.com" },
   { number: 2, name: "Johnson Controls", captain: "Marcus Lloyd", email: "marcus.t.lloyd@jci.com" },
@@ -482,71 +504,57 @@ const SCHEDULE = {
 
 const GAMES = ["Cricket", "Cricket", "301", "501", "Baseball"];
 const CANLIFT_NUM = 21;
+const DB_KEY = "canlift_scores_2026";
 
 let scores = {};
-let isSaving = false;
+let lastRefreshed = null;
 
-// ---- Sync Status ----
-function setSyncStatus(state, text) {
-  const dot = document.getElementById('syncDot');
-  const label = document.getElementById('syncText');
-  dot.className = 'sync-dot ' + state;
-  label.textContent = text;
+// ---- Toast ----
+let toastTimer = null;
+function showToast(msg, color = 'var(--green)') {
+  const toast = document.getElementById('saveToast');
+  const dot = document.getElementById('toastDot');
+  document.getElementById('toastMsg').textContent = msg;
+  dot.style.background = color;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
 }
 
-// ---- Google Sheets API ----
-async function loadScoresFromSheet() {
-  try {
-    setSyncStatus('syncing', 'Loading...');
-    const url = APPS_SCRIPT_URL + '?action=loadScores&t=' + Date.now();
-    const resp = await fetch(url);
-    const data = await resp.json();
-    if (data.success && data.scores) {
-      scores = data.scores;
-      setSyncStatus('synced', 'Synced');
-    } else {
-      setSyncStatus('error', 'Sheet error');
-      // Fall back to local db
-      await loadScoresLocal();
-    }
-  } catch (e) {
-    setSyncStatus('error', 'Offline – local only');
-    await loadScoresLocal();
-  }
+// ---- Last Refreshed ----
+function updateRefreshedLabel() {
+  const el = document.getElementById('lastRefreshedText');
+  if (!lastRefreshed) { el.textContent = 'Not yet refreshed'; return; }
+  const diff = Math.floor((new Date() - lastRefreshed) / 1000);
+  if (diff < 60) el.textContent = 'Refreshed just now';
+  else if (diff < 3600) el.textContent = `Refreshed ${Math.floor(diff/60)}m ago`;
+  else el.textContent = `Refreshed ${lastRefreshed.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
 }
 
-async function saveScoreToSheet(matchKey, gameIdx, result) {
-  // Optimistic local save first
-  await saveScoresLocal();
-  setSyncStatus('syncing', 'Saving...');
-  try {
-    const resp = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'saveScore', matchKey, gameIdx, result })
-    });
-    const data = await resp.json();
-    if (data.success) {
-      setSyncStatus('synced', 'Saved ✓');
-    } else {
-      setSyncStatus('error', 'Save failed');
-    }
-  } catch (e) {
-    setSyncStatus('error', 'Offline – saved locally');
-  }
+function manualRefresh() {
+  loadScores().then(() => {
+    updateAllDisplays();
+    showToast('Scores refreshed ✓');
+  });
 }
 
-// ---- Local DB fallback ----
-async function loadScoresLocal() {
+// ---- Persistence ----
+async function loadScores() {
   try {
-    const data = await window.db.get('canlift_scores_2026');
+    const data = await window.db.get(DB_KEY);
     if (data && data.scores) scores = data.scores;
+    lastRefreshed = new Date();
+    updateRefreshedLabel();
   } catch(e) {}
 }
 
-async function saveScoresLocal() {
+async function saveScores() {
   try {
-    await window.db.set('canlift_scores_2026', { scores });
-  } catch(e) {}
+    await window.db.set(DB_KEY, { scores, savedAt: new Date().toISOString() });
+    showToast('Score saved ✓');
+  } catch(e) {
+    showToast('Save failed', 'var(--cl-red)');
+  }
 }
 
 // ---- Data helpers ----
@@ -590,6 +598,65 @@ function getMatchWLT(matchKey) {
   return { w, l, t };
 }
 
+// CanLift opponents set
+const clOpponentSet = new Set(getCanLiftMatches().map(m => m.opponent));
+
+// Get cumulative W for CanLift across all matches
+function getCanLiftTotalW() {
+  let w = 0;
+  Object.values(scores).forEach(ms => {
+    Object.values(ms).forEach(r => { if (r === 'W') w++; });
+  });
+  return w;
+}
+
+// Get cumulative W for any team from CanLift perspective
+// For CanLift opponents: their W = CanLift's L in that match
+// For CanLift itself: their W = CanLift's W
+function getTeamWinsForDisplay(teamNum) {
+  if (isCanLift(teamNum)) {
+    let w = 0;
+    getCanLiftMatches().forEach(({ date, opponent }) => {
+      const mk = `${date}_${opponent}`;
+      const ms = getMatchScores(mk);
+      GAMES.forEach((_, idx) => { if (ms[idx] === 'W') w++; });
+    });
+    return w;
+  }
+  // For opponent teams: their wins = CanLift's losses vs them
+  let w = 0;
+  getCanLiftMatches().forEach(({ date, opponent }) => {
+    if (opponent === teamNum) {
+      const mk = `${date}_${opponent}`;
+      const ms = getMatchScores(mk);
+      GAMES.forEach((_, idx) => { if (ms[idx] === 'L') w++; });
+    }
+  });
+  return w;
+}
+
+// Get ties for a team (only from CanLift matches)
+function getTeamTiesForDisplay(teamNum) {
+  let t = 0;
+  getCanLiftMatches().forEach(({ date, opponent }) => {
+    if (opponent === teamNum || isCanLift(teamNum)) {
+      const mk = `${date}_${opponent}`;
+      const ms = getMatchScores(mk);
+      GAMES.forEach((_, idx) => { if (ms[idx] === 'T') t++; });
+    }
+  });
+  return t;
+}
+
+// Get ties in a specific match
+function getMatchTiesForPair(date, t1, t2) {
+  if (!isCanLift(t1) && !isCanLift(t2)) return 0;
+  const oppNum = isCanLift(t1) ? t2 : t1;
+  const mk = `${date}_${oppNum}`;
+  const { t } = getMatchWLT(mk);
+  return t;
+}
+
 function getTeamWLT(teamNum) {
   let w = 0, l = 0, t = 0;
   getCanLiftMatches().forEach(({ date, opponent }) => {
@@ -627,20 +694,14 @@ function getH2HRecord(matchKey) {
 
 // ---- Score setting ----
 async function setScore(matchKey, gameIdx, result) {
-  if (isSaving) return;
-  isSaving = true;
-
   if (!scores[matchKey]) scores[matchKey] = {};
   if (scores[matchKey][gameIdx] === result) {
     delete scores[matchKey][gameIdx];
-    result = '';
   } else {
     scores[matchKey][gameIdx] = result;
   }
-
   updateAllDisplays();
-  await saveScoreToSheet(matchKey, gameIdx, result);
-  isSaving = false;
+  await saveScores();
 }
 
 function updateAllDisplays() {
@@ -649,6 +710,7 @@ function updateAllDisplays() {
   renderTeams();
   renderCanLiftSchedule();
   renderNextMatch();
+  updateRefreshedLabel();
 }
 
 function updateQuickSummary() {
@@ -703,6 +765,7 @@ function renderSchedule() {
   const grid = document.getElementById('scheduleGrid');
   grid.innerHTML = '';
   const matches = SCHEDULE[activeDate];
+
   matches.forEach(([board, t1, t2]) => {
     const team1 = getTeam(t1);
     const team2 = getTeam(t2);
@@ -714,6 +777,13 @@ function renderSchedule() {
       const mk = `${activeDate}_${oppNum}`;
       clMatchRecord = getH2HRecord(mk);
     }
+
+    // W counts — show for ALL teams (0 if none), subtle display
+    const t1Wins = getTeamWinsForDisplay(t1);
+    const t2Wins = getTeamWinsForDisplay(t2);
+
+    // Ties — only show in VS section if this is a CanLift match with ties
+    const tiesInMatch = isClMatch ? getMatchTiesForPair(activeDate, t1, t2) : 0;
 
     const card = document.createElement('div');
     card.className = 'match-card';
@@ -727,12 +797,17 @@ function renderSchedule() {
           <div class="team-num">Team #${t1}</div>
           <div class="team-name">${team1 ? team1.name : 'Team '+t1}</div>
           <div class="captain-name">${team1 ? team1.captain : ''}</div>
+          <div class="team-wins">W: ${t1Wins}</div>
         </div>
-        <div class="vs-badge">VS</div>
+        <div class="vs-section">
+          <div class="vs-badge">VS</div>
+          ${tiesInMatch > 0 ? `<div class="tie-badge">T: ${tiesInMatch}</div>` : ''}
+        </div>
         <div class="team-chip">
           <div class="team-num">Team #${t2}</div>
           <div class="team-name">${team2 ? team2.name : 'Team '+t2}</div>
           <div class="captain-name">${team2 ? team2.captain : ''}</div>
+          <div class="team-wins">W: ${t2Wins}</div>
         </div>
       </div>
     `;
@@ -741,8 +816,6 @@ function renderSchedule() {
 }
 
 // ---- Teams Tab ----
-const clOpponents = new Set(getCanLiftMatches().map(m => m.opponent));
-
 function renderTeams(filter = '') {
   const tbody = document.getElementById('teamsBody');
   tbody.innerHTML = '';
@@ -750,7 +823,7 @@ function renderTeams(filter = '') {
   TEAMS.filter(t =>
     !f || t.name.toLowerCase().includes(f) || t.captain.toLowerCase().includes(f) || t.email.toLowerCase().includes(f)
   ).forEach(t => {
-    const hasPlayed = clOpponents.has(t.number);
+    const hasPlayed = clOpponentSet.has(t.number);
     let wHtml = '<span class="dash">—</span>';
     let lHtml = '<span class="dash">—</span>';
     let tHtml = '<span class="dash">—</span>';
@@ -849,10 +922,11 @@ function showTabByName(name, event) {
   }
 }
 
+setInterval(updateRefreshedLabel, 60000);
+
 // ---- Init ----
 async function init() {
-  await loadScoresFromSheet();
-  document.getElementById('loadingOverlay').style.display = 'none';
+  await loadScores();
   buildDateSelector();
   renderSchedule();
   renderTeams();
