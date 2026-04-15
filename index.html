@@ -150,7 +150,6 @@
   .team-chip .team-num { font-size: 0.68rem; color: var(--muted); font-weight: 600; }
   .team-chip .team-name { font-size: 0.8rem; font-weight: 700; line-height: 1.2; margin-top: 2px; }
   .team-chip .captain-name { font-size: 0.7rem; color: var(--muted); margin-top: 3px; }
-  /* Subtle W display — same size as team-num, not bold, dark/red */
   .team-chip .team-wins {
     font-size: 0.68rem;
     font-weight: 400;
@@ -300,23 +299,18 @@
     font-size: 0.78rem;
   }
   .score-game-row .gname { flex: 1; color: var(--cl-gray); font-weight: 600; }
-  .score-btns { display: flex; gap: 4px; }
-  .score-btn {
-    padding: 3px 10px;
-    border-radius: 6px;
-    border: 1.5px solid var(--border);
-    cursor: pointer;
+  .result-pill {
     font-size: 0.72rem;
     font-weight: 700;
-    background: white;
-    transition: all 0.15s;
+    padding: 2px 10px;
+    border-radius: 6px;
+    min-width: 28px;
+    text-align: center;
   }
-  .score-btn.win { border-color: var(--green); color: var(--green); }
-  .score-btn.win.selected { background: var(--green); color: white; }
-  .score-btn.loss { border-color: var(--cl-red); color: var(--cl-red); }
-  .score-btn.loss.selected { background: var(--cl-red); color: white; }
-  .score-btn.tie { border-color: var(--yellow); color: var(--yellow); }
-  .score-btn.tie.selected { background: var(--yellow); color: white; }
+  .result-pill.W { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+  .result-pill.L { background: var(--cl-red-light); color: var(--cl-red); border: 1px solid #fca5a5; }
+  .result-pill.T { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+  .result-pill.none { background: #f0f0f0; color: #aaa; border: 1px solid #ddd; }
 
   .night-summary {
     margin-top: 8px;
@@ -347,35 +341,48 @@
   .next-match-banner .nm-opp { font-size: 1rem; font-weight: 800; margin-top: 2px; }
   .next-match-banner .nm-details { font-size: 0.78rem; opacity: 0.85; margin-top: 2px; }
 
-  .save-toast {
+  .loading-bar {
     position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: var(--cl-dark);
-    color: white;
-    padding: 10px 18px;
-    border-radius: 8px;
-    font-size: 0.82rem;
-    font-weight: 600;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    transform: translateY(80px);
-    opacity: 0;
-    transition: all 0.3s ease;
-    z-index: 999;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--cl-red);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.4s ease;
+    z-index: 9999;
   }
-  .save-toast.show { transform: translateY(0); opacity: 1; }
-  .save-toast .toast-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+  .loading-bar.active { transform: scaleX(0.7); }
+  .loading-bar.done { transform: scaleX(1); transition: transform 0.2s ease; }
+
+  .data-source-note {
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-align: center;
+    padding: 8px;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+  .data-source-note a { color: var(--cl-red); text-decoration: none; }
+  .data-source-note a:hover { text-decoration: underline; }
+
+  .error-banner {
+    background: #fff5f5;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.8rem;
+    color: var(--cl-red);
+    margin-bottom: 16px;
+    display: none;
+  }
+  .error-banner.show { display: block; }
 </style>
 </head>
 <body>
 
-<div class="save-toast" id="saveToast">
-  <div class="toast-dot" id="toastDot"></div>
-  <span id="toastMsg">Saved</span>
-</div>
+<div class="loading-bar" id="loadingBar"></div>
 
 <header>
   <div class="header-left">
@@ -390,8 +397,8 @@
       🎯 CanLift #21
     </button>
     <div class="last-refreshed">
-      <span id="lastRefreshedText">Loading...</span>
-      <button class="refresh-btn" onclick="manualRefresh()" title="Refresh scores">↻</button>
+      <span id="lastRefreshedText">Loading data...</span>
+      <button class="refresh-btn" onclick="manualRefresh()" title="Refresh from Google Sheets">↻</button>
     </div>
   </div>
 </header>
@@ -441,6 +448,14 @@
       </div>
     </div>
 
+    <div class="error-banner" id="errorBanner">
+      ⚠️ Could not load data from Google Sheets. Showing cached data if available.
+    </div>
+
+    <div class="data-source-note">
+      📊 Scores loaded from <a href="https://docs.google.com/spreadsheets/d/1PmQlXxTHT3ZtgWXLS-ZrfQ20CEHEbkTeDHq5htY6Tkw/edit" target="_blank">Google Sheets</a> · Updated weekly after each match night
+    </div>
+
     <div id="nextMatchBanner"></div>
 
     <div class="quick-summary">
@@ -456,6 +471,21 @@
 </div>
 
 <script>
+// ============================================================
+// CONFIGURATION
+// ============================================================
+const SHEET_ID = "1PmQlXxTHT3ZtgWXLS-ZrfQ20CEHEbkTeDHq5htY6Tkw";
+const CANLIFT_SHEET_NAME = "CanLift Scores";
+const ALL_TEAMS_SHEET_NAME = "All Team Scores";
+const DB_KEY = "canlift_scores_2026_v2";
+
+// Google Sheets CSV export URLs (public read, no auth needed)
+const CANLIFT_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(CANLIFT_SHEET_NAME)}`;
+const ALL_TEAMS_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(ALL_TEAMS_SHEET_NAME)}`;
+
+// ============================================================
+// STATIC DATA
+// ============================================================
 const TEAMS = [
   { number: 1, name: "Derrick International / Newpark Drilling Fluids", captain: "Todd Iverson / Joe Grant", email: "jaziconsultant@outlook.com / jgrant1@newpark.com" },
   { number: 2, name: "Johnson Controls", captain: "Marcus Lloyd", email: "marcus.t.lloyd@jci.com" },
@@ -504,60 +534,165 @@ const SCHEDULE = {
 
 const GAMES = ["Cricket", "Cricket", "301", "501", "Baseball"];
 const CANLIFT_NUM = 21;
-const DB_KEY = "canlift_scores_2026";
 
+// ============================================================
+// STATE
+// ============================================================
+// scores: { "09-Apr-26_6": { 0: "L", 1: "L", 2: "L", 3: "L", 4: "L" }, ... }
 let scores = {};
+// allTeamScores: { teamNum: { w, l, t } } — from All Team Scores sheet
+let allTeamScores = {};
 let lastRefreshed = null;
+let dataFromSheet = false;
 
-// ---- Toast ----
-let toastTimer = null;
-function showToast(msg, color = 'var(--green)') {
-  const toast = document.getElementById('saveToast');
-  const dot = document.getElementById('toastDot');
-  document.getElementById('toastMsg').textContent = msg;
-  dot.style.background = color;
-  toast.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+// ============================================================
+// CSV PARSING
+// ============================================================
+function parseCSV(text) {
+  const rows = [];
+  const lines = text.split('\n');
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    // Simple CSV parse (handles quoted fields)
+    const cols = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { inQ = !inQ; }
+      else if (c === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+      else { cur += c; }
+    }
+    cols.push(cur.trim());
+    rows.push(cols);
+  }
+  return rows;
 }
 
-// ---- Last Refreshed ----
-function updateRefreshedLabel() {
-  const el = document.getElementById('lastRefreshedText');
-  if (!lastRefreshed) { el.textContent = 'Not yet refreshed'; return; }
-  const diff = Math.floor((new Date() - lastRefreshed) / 1000);
-  if (diff < 60) el.textContent = 'Refreshed just now';
-  else if (diff < 3600) el.textContent = `Refreshed ${Math.floor(diff/60)}m ago`;
-  else el.textContent = `Refreshed ${lastRefreshed.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
+function parseCanLiftScores(csvText) {
+  const rows = parseCSV(csvText);
+  const result = {};
+  // Skip header row (row 0)
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row[0] || !row[1]) continue;
+    const date = row[0].trim();
+    const opponentNum = parseInt(row[1]);
+    if (!date || isNaN(opponentNum)) continue;
+    const matchKey = `${date}_${opponentNum}`;
+    result[matchKey] = {};
+    // Columns E-I = indices 4-8 = game indices 0-4
+    for (let g = 0; g < 5; g++) {
+      const val = (row[4 + g] || '').trim().toUpperCase();
+      if (val === 'W' || val === 'L' || val === 'T') {
+        result[matchKey][g] = val;
+      }
+    }
+  }
+  return result;
 }
 
-function manualRefresh() {
-  loadScores().then(() => {
-    updateAllDisplays();
-    showToast('Scores refreshed ✓');
-  });
+function parseAllTeamScores(csvText) {
+  const rows = parseCSV(csvText);
+  const result = {};
+  // Skip header row
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row[0]) continue;
+    const teamNum = parseInt(row[0]);
+    if (isNaN(teamNum)) continue;
+    const w = parseInt(row[3]) || 0;
+    const l = parseInt(row[4]) || 0;
+    const t = parseInt(row[5]) || 0;
+    result[teamNum] = { w, l, t };
+  }
+  return result;
 }
 
-// ---- Persistence ----
-async function loadScores() {
-  try {
-    const data = await window.db.get(DB_KEY);
-    if (data && data.scores) scores = data.scores;
-    lastRefreshed = new Date();
-    updateRefreshedLabel();
-  } catch(e) {}
-}
-
-async function saveScores() {
-  try {
-    await window.db.set(DB_KEY, { scores, savedAt: new Date().toISOString() });
-    showToast('Score saved ✓');
-  } catch(e) {
-    showToast('Save failed', 'var(--cl-red)');
+// ============================================================
+// DATA LOADING
+// ============================================================
+function setLoadingBar(state) {
+  const bar = document.getElementById('loadingBar');
+  bar.className = 'loading-bar ' + state;
+  if (state === 'done') {
+    setTimeout(() => { bar.className = 'loading-bar'; }, 600);
   }
 }
 
-// ---- Data helpers ----
+async function loadFromSheets() {
+  setLoadingBar('active');
+  try {
+    const [clResp, atResp] = await Promise.all([
+      fetch(CANLIFT_CSV_URL + '&t=' + Date.now()),
+      fetch(ALL_TEAMS_CSV_URL + '&t=' + Date.now())
+    ]);
+
+    if (!clResp.ok || !atResp.ok) throw new Error('Sheet fetch failed');
+
+    const [clText, atText] = await Promise.all([clResp.text(), atResp.text()]);
+
+    scores = parseCanLiftScores(clText);
+    allTeamScores = parseAllTeamScores(atText);
+    dataFromSheet = true;
+
+    // Cache to db
+    await window.db.set(DB_KEY, {
+      scores,
+      allTeamScores,
+      savedAt: new Date().toISOString()
+    });
+
+    document.getElementById('errorBanner').classList.remove('show');
+    lastRefreshed = new Date();
+    updateRefreshedLabel();
+    setLoadingBar('done');
+    return true;
+  } catch (e) {
+    console.warn('Sheet load failed:', e);
+    setLoadingBar('done');
+    return false;
+  }
+}
+
+async function loadFromCache() {
+  try {
+    const data = await window.db.get(DB_KEY);
+    if (data && data.scores) {
+      scores = data.scores;
+      allTeamScores = data.allTeamScores || {};
+      lastRefreshed = data.savedAt ? new Date(data.savedAt) : null;
+      updateRefreshedLabel();
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+async function loadData() {
+  const sheetOk = await loadFromSheets();
+  if (!sheetOk) {
+    const cacheOk = await loadFromCache();
+    if (!cacheOk) {
+      document.getElementById('errorBanner').classList.add('show');
+    } else {
+      document.getElementById('errorBanner').classList.add('show');
+    }
+  }
+}
+
+async function manualRefresh() {
+  document.getElementById('lastRefreshedText').textContent = 'Refreshing...';
+  const ok = await loadFromSheets();
+  if (ok) {
+    updateAllDisplays();
+  } else {
+    document.getElementById('lastRefreshedText').textContent = 'Refresh failed';
+  }
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
 function getTeam(num) { return TEAMS.find(t => t.number === num); }
 function isCanLift(num) { return num === CANLIFT_NUM; }
 
@@ -568,7 +703,7 @@ function parseDate(dateStr) {
 }
 
 function isPast(dateStr) {
-  const today = new Date('2026-04-07');
+  const today = new Date();
   return parseDate(dateStr) < today;
 }
 
@@ -585,6 +720,8 @@ function getCanLiftMatches() {
   return matches;
 }
 
+const clOpponentSet = new Set(getCanLiftMatches().map(m => m.opponent));
+
 function getMatchScores(matchKey) { return scores[matchKey] || {}; }
 
 function getMatchWLT(matchKey) {
@@ -598,32 +735,36 @@ function getMatchWLT(matchKey) {
   return { w, l, t };
 }
 
-// CanLift opponents set
-const clOpponentSet = new Set(getCanLiftMatches().map(m => m.opponent));
-
-// Get cumulative W for CanLift across all matches
-function getCanLiftTotalW() {
-  let w = 0;
-  Object.values(scores).forEach(ms => {
-    Object.values(ms).forEach(r => { if (r === 'W') w++; });
-  });
-  return w;
+function getH2HRecord(matchKey) {
+  const { w, l, t } = getMatchWLT(matchKey);
+  const total = w + l + t;
+  if (total === 0) return null;
+  return `${w}-${l}-${t}`;
 }
 
-// Get cumulative W for any team from CanLift perspective
-// For CanLift opponents: their W = CanLift's L in that match
-// For CanLift itself: their W = CanLift's W
-function getTeamWinsForDisplay(teamNum) {
-  if (isCanLift(teamNum)) {
-    let w = 0;
-    getCanLiftMatches().forEach(({ date, opponent }) => {
-      const mk = `${date}_${opponent}`;
-      const ms = getMatchScores(mk);
-      GAMES.forEach((_, idx) => { if (ms[idx] === 'W') w++; });
+function getOverallWLT() {
+  let w = 0, l = 0, t = 0;
+  Object.values(scores).forEach(ms => {
+    Object.values(ms).forEach(r => {
+      if (r === 'W') w++;
+      else if (r === 'L') l++;
+      else if (r === 'T') t++;
     });
+  });
+  return { w, l, t };
+}
+
+// Get team's W count for display on schedule (from allTeamScores or derived)
+function getTeamWinsForSchedule(teamNum) {
+  if (isCanLift(teamNum)) {
+    const { w } = getOverallWLT();
     return w;
   }
-  // For opponent teams: their wins = CanLift's losses vs them
+  // From allTeamScores sheet if available
+  if (allTeamScores[teamNum] !== undefined) {
+    return allTeamScores[teamNum].w;
+  }
+  // Fallback: derive from CanLift match scores
   let w = 0;
   getCanLiftMatches().forEach(({ date, opponent }) => {
     if (opponent === teamNum) {
@@ -635,20 +776,6 @@ function getTeamWinsForDisplay(teamNum) {
   return w;
 }
 
-// Get ties for a team (only from CanLift matches)
-function getTeamTiesForDisplay(teamNum) {
-  let t = 0;
-  getCanLiftMatches().forEach(({ date, opponent }) => {
-    if (opponent === teamNum || isCanLift(teamNum)) {
-      const mk = `${date}_${opponent}`;
-      const ms = getMatchScores(mk);
-      GAMES.forEach((_, idx) => { if (ms[idx] === 'T') t++; });
-    }
-  });
-  return t;
-}
-
-// Get ties in a specific match
 function getMatchTiesForPair(date, t1, t2) {
   if (!isCanLift(t1) && !isCanLift(t2)) return 0;
   const oppNum = isCanLift(t1) ? t2 : t1;
@@ -657,62 +784,21 @@ function getMatchTiesForPair(date, t1, t2) {
   return t;
 }
 
-function getTeamWLT(teamNum) {
-  let w = 0, l = 0, t = 0;
-  getCanLiftMatches().forEach(({ date, opponent }) => {
-    if (opponent === teamNum) {
-      const matchKey = `${date}_${opponent}`;
-      const ms = getMatchScores(matchKey);
-      GAMES.forEach((_, idx) => {
-        if (ms[idx] === 'W') l++;
-        else if (ms[idx] === 'L') w++;
-        else if (ms[idx] === 'T') t++;
-      });
-    }
-  });
-  return { w, l, t };
+// ============================================================
+// LAST REFRESHED
+// ============================================================
+function updateRefreshedLabel() {
+  const el = document.getElementById('lastRefreshedText');
+  if (!lastRefreshed) { el.textContent = 'Not yet refreshed'; return; }
+  const diff = Math.floor((new Date() - lastRefreshed) / 1000);
+  if (diff < 60) el.textContent = 'Refreshed just now';
+  else if (diff < 3600) el.textContent = `Refreshed ${Math.floor(diff/60)}m ago`;
+  else el.textContent = `Refreshed ${lastRefreshed.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
 }
 
-function getOverallWLT() {
-  let w = 0, l = 0, t = 0;
-  Object.values(scores).forEach(matchScores => {
-    Object.values(matchScores).forEach(result => {
-      if (result === 'W') w++;
-      else if (result === 'L') l++;
-      else if (result === 'T') t++;
-    });
-  });
-  return { w, l, t };
-}
-
-function getH2HRecord(matchKey) {
-  const { w, l, t } = getMatchWLT(matchKey);
-  const total = w + l + t;
-  if (total === 0) return null;
-  return `${w}-${l}-${t}`;
-}
-
-// ---- Score setting ----
-async function setScore(matchKey, gameIdx, result) {
-  if (!scores[matchKey]) scores[matchKey] = {};
-  if (scores[matchKey][gameIdx] === result) {
-    delete scores[matchKey][gameIdx];
-  } else {
-    scores[matchKey][gameIdx] = result;
-  }
-  updateAllDisplays();
-  await saveScores();
-}
-
-function updateAllDisplays() {
-  updateQuickSummary();
-  renderSchedule();
-  renderTeams();
-  renderCanLiftSchedule();
-  renderNextMatch();
-  updateRefreshedLabel();
-}
-
+// ============================================================
+// RENDER: QUICK SUMMARY
+// ============================================================
 function updateQuickSummary() {
   const { w, l, t } = getOverallWLT();
   const total = w + l + t;
@@ -723,9 +809,12 @@ function updateQuickSummary() {
   document.getElementById('qsPct').textContent = pct;
 }
 
+// ============================================================
+// RENDER: NEXT MATCH BANNER
+// ============================================================
 function renderNextMatch() {
   const banner = document.getElementById('nextMatchBanner');
-  const today = new Date('2026-04-07');
+  const today = new Date();
   const clMatches = getCanLiftMatches();
   const next = clMatches.find(m => parseDate(m.date) >= today);
   if (!next) { banner.innerHTML = ''; return; }
@@ -742,7 +831,9 @@ function renderNextMatch() {
   `;
 }
 
-// ---- Schedule Tab ----
+// ============================================================
+// RENDER: SCHEDULE TAB
+// ============================================================
 let activeDate = Object.keys(SCHEDULE)[0];
 
 function buildDateSelector() {
@@ -778,11 +869,8 @@ function renderSchedule() {
       clMatchRecord = getH2HRecord(mk);
     }
 
-    // W counts — show for ALL teams (0 if none), subtle display
-    const t1Wins = getTeamWinsForDisplay(t1);
-    const t2Wins = getTeamWinsForDisplay(t2);
-
-    // Ties — only show in VS section if this is a CanLift match with ties
+    const t1Wins = getTeamWinsForSchedule(t1);
+    const t2Wins = getTeamWinsForSchedule(t2);
     const tiesInMatch = isClMatch ? getMatchTiesForPair(activeDate, t1, t2) : 0;
 
     const card = document.createElement('div');
@@ -815,7 +903,9 @@ function renderSchedule() {
   });
 }
 
-// ---- Teams Tab ----
+// ============================================================
+// RENDER: TEAMS TAB
+// ============================================================
 function renderTeams(filter = '') {
   const tbody = document.getElementById('teamsBody');
   tbody.innerHTML = '';
@@ -823,14 +913,32 @@ function renderTeams(filter = '') {
   TEAMS.filter(t =>
     !f || t.name.toLowerCase().includes(f) || t.captain.toLowerCase().includes(f) || t.email.toLowerCase().includes(f)
   ).forEach(t => {
-    const hasPlayed = clOpponentSet.has(t.number);
+    const isOpp = clOpponentSet.has(t.number);
     let wHtml = '<span class="dash">—</span>';
     let lHtml = '<span class="dash">—</span>';
     let tHtml = '<span class="dash">—</span>';
     let pctHtml = '<span class="dash">—</span>';
 
-    if (hasPlayed) {
-      const { w, l, t: ties } = getTeamWLT(t.number);
+    if (isOpp) {
+      // Use allTeamScores if available, else derive from match scores
+      let w = 0, l = 0, ties = 0;
+      if (allTeamScores[t.number] !== undefined) {
+        w = allTeamScores[t.number].w;
+        l = allTeamScores[t.number].l;
+        ties = allTeamScores[t.number].t;
+      } else {
+        getCanLiftMatches().forEach(({ date, opponent }) => {
+          if (opponent === t.number) {
+            const mk = `${date}_${opponent}`;
+            const ms = getMatchScores(mk);
+            GAMES.forEach((_, idx) => {
+              if (ms[idx] === 'W') l++;
+              else if (ms[idx] === 'L') w++;
+              else if (ms[idx] === 'T') ties++;
+            });
+          }
+        });
+      }
       const total = w + l + ties;
       wHtml = `<span class="w">${w}</span>`;
       lHtml = `<span class="l">${l}</span>`;
@@ -854,7 +962,9 @@ function renderTeams(filter = '') {
 
 function filterTeams(val) { renderTeams(val); }
 
-// ---- CanLift Schedule ----
+// ============================================================
+// RENDER: CANLIFT SCHEDULE TAB
+// ============================================================
 function renderCanLiftSchedule() {
   const listEl = document.getElementById('canliftSchedule');
   listEl.innerHTML = '';
@@ -883,17 +993,18 @@ function renderCanLiftSchedule() {
         </div>
         <div class="details">📋 Board ${board} &nbsp;|&nbsp; 👤 ${opp ? opp.captain : ''}</div>
         <div class="${h2h ? 'h2h-badge has-record' : 'h2h-badge'}">${h2h ? 'Record: '+h2h : 'No results yet'}</div>
-        <div class="score-games" id="score-${matchKey}">
-          ${GAMES.map((game, idx) => `
-            <div class="score-game-row" data-game="${idx}">
-              <span class="gname">${game}</span>
-              <div class="score-btns">
-                <button class="score-btn win${matchScores[idx] === 'W' ? ' selected' : ''}" onclick="setScore('${matchKey}', ${idx}, 'W')">W</button>
-                <button class="score-btn loss${matchScores[idx] === 'L' ? ' selected' : ''}" onclick="setScore('${matchKey}', ${idx}, 'L')">L</button>
-                <button class="score-btn tie${matchScores[idx] === 'T' ? ' selected' : ''}" onclick="setScore('${matchKey}', ${idx}, 'T')">T</button>
+        <div class="score-games">
+          ${GAMES.map((game, idx) => {
+            const res = matchScores[idx] || null;
+            const pillClass = res ? res : 'none';
+            const pillText = res || '—';
+            return `
+              <div class="score-game-row">
+                <span class="gname">${game}</span>
+                <span class="result-pill ${pillClass}">${pillText}</span>
               </div>
-            </div>
-          `).join('')}
+            `;
+          }).join('')}
           <div class="night-summary">
             <span class="ns-label">Night:</span>
             <span class="ns-w">W: ${w}</span>
@@ -908,7 +1019,21 @@ function renderCanLiftSchedule() {
   });
 }
 
-// ---- Tab switching ----
+// ============================================================
+// UPDATE ALL
+// ============================================================
+function updateAllDisplays() {
+  updateQuickSummary();
+  renderSchedule();
+  renderTeams();
+  renderCanLiftSchedule();
+  renderNextMatch();
+  updateRefreshedLabel();
+}
+
+// ============================================================
+// TAB SWITCHING
+// ============================================================
 function showTabByName(name, event) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(btn => btn.classList.remove('active'));
@@ -924,15 +1049,17 @@ function showTabByName(name, event) {
 
 setInterval(updateRefreshedLabel, 60000);
 
-// ---- Init ----
+// ============================================================
+// INIT
+// ============================================================
 async function init() {
-  await loadScores();
   buildDateSelector();
-  renderSchedule();
-  renderTeams();
-  renderCanLiftSchedule();
-  renderNextMatch();
-  updateQuickSummary();
+  // Load cached data first for instant display
+  await loadFromCache();
+  updateAllDisplays();
+  // Then fetch fresh from Google Sheets
+  const ok = await loadFromSheets();
+  if (ok) updateAllDisplays();
 }
 
 init();
