@@ -378,6 +378,19 @@
     display: none;
   }
   .error-banner.show { display: block; }
+
+  .debug-info {
+    background: #f8f8f8;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.72rem;
+    color: #666;
+    margin-bottom: 12px;
+    font-family: monospace;
+    display: none;
+  }
+  .debug-info.show { display: block; }
 </style>
 </head>
 <body>
@@ -449,8 +462,10 @@
     </div>
 
     <div class="error-banner" id="errorBanner">
-      ⚠️ Could not load data from Google Sheets. Showing cached data if available.
+      ⚠️ Could not load data from Google Sheets. Showing cached data if available. Try the refresh button (↻) above.
     </div>
+
+    <div class="debug-info" id="debugInfo"></div>
 
     <div class="data-source-note">
       📊 Scores loaded from <a href="https://docs.google.com/spreadsheets/d/1PmQlXxTHT3ZtgWXLS-ZrfQ20CEHEbkTeDHq5htY6Tkw/edit" target="_blank">Google Sheets</a> · Updated weekly after each match night
@@ -477,11 +492,11 @@
 const SHEET_ID = "1PmQlXxTHT3ZtgWXLS-ZrfQ20CEHEbkTeDHq5htY6Tkw";
 const CANLIFT_SHEET_NAME = "CanLift Scores";
 const ALL_TEAMS_SHEET_NAME = "All Team Scores";
-const DB_KEY = "canlift_scores_2026_v2";
+const DB_KEY = "canlift_scores_2026_v3";
 
-// Google Sheets CSV export URLs (public read, no auth needed)
-const CANLIFT_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(CANLIFT_SHEET_NAME)}`;
-const ALL_TEAMS_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(ALL_TEAMS_SHEET_NAME)}`;
+// Use the gviz CSV export — works for publicly shared sheets
+const CANLIFT_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(CANLIFT_SHEET_NAME)}&t=`;
+const ALL_TEAMS_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(ALL_TEAMS_SHEET_NAME)}&t=`;
 
 // ============================================================
 // STATIC DATA
@@ -538,73 +553,97 @@ const CANLIFT_NUM = 21;
 // ============================================================
 // STATE
 // ============================================================
-// scores: { "09-Apr-26_6": { 0: "L", 1: "L", 2: "L", 3: "L", 4: "L" }, ... }
-let scores = {};
-// allTeamScores: { teamNum: { w, l, t } } — from All Team Scores sheet
-let allTeamScores = {};
+let scores = {};         // { "09-Apr-26_6": { 0: "L", 1: "L", ... } }
+let allTeamScores = {};  // { teamNum: { w, l, t } }
 let lastRefreshed = null;
-let dataFromSheet = false;
+let debugLog = [];
 
 // ============================================================
-// CSV PARSING
+// CSV PARSING — robust quoted-field parser
 // ============================================================
-function parseCSV(text) {
-  const rows = [];
-  const lines = text.split('\n');
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    // Simple CSV parse (handles quoted fields)
-    const cols = [];
-    let cur = '', inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i];
-      if (c === '"') { inQ = !inQ; }
-      else if (c === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
-      else { cur += c; }
+function parseCSVLine(line) {
+  const cols = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+      else { inQ = !inQ; }
+    } else if (c === ',' && !inQ) {
+      cols.push(cur.trim());
+      cur = '';
+    } else {
+      cur += c;
     }
-    cols.push(cur.trim());
-    rows.push(cols);
   }
-  return rows;
+  cols.push(cur.trim());
+  return cols;
 }
 
+function parseCSV(text) {
+  return text.split('\n').filter(l => l.trim()).map(parseCSVLine);
+}
+
+// CanLift Scores sheet columns:
+// A(0): Date  B(1): Opponent#  C(2): Opponent Name  D(3): Board
+// E(4): Cricket  F(5): Cricket  G(6): 301  H(7): 501  I(8): Baseball
+// J(9): Night Record (formula)
 function parseCanLiftScores(csvText) {
   const rows = parseCSV(csvText);
   const result = {};
-  // Skip header row (row 0)
+  const log = [];
+
+  log.push(`Total rows (incl header): ${rows.length}`);
+
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
-    if (!row[0] || !row[1]) continue;
-    const date = row[0].trim();
-    const opponentNum = parseInt(row[1]);
-    if (!date || isNaN(opponentNum)) continue;
-    const matchKey = `${date}_${opponentNum}`;
+    if (!row || row.length < 5) continue;
+
+    const dateRaw = (row[0] || '').replace(/"/g, '').trim();
+    const oppRaw = (row[1] || '').replace(/"/g, '').trim();
+
+    if (!dateRaw || !oppRaw) continue;
+
+    const opponentNum = parseInt(oppRaw);
+    if (isNaN(opponentNum)) continue;
+
+    const matchKey = `${dateRaw}_${opponentNum}`;
     result[matchKey] = {};
-    // Columns E-I = indices 4-8 = game indices 0-4
+
+    // Game results in columns E-I (indices 4-8)
     for (let g = 0; g < 5; g++) {
-      const val = (row[4 + g] || '').trim().toUpperCase();
-      if (val === 'W' || val === 'L' || val === 'T') {
-        result[matchKey][g] = val;
+      const raw = (row[4 + g] || '').replace(/"/g, '').trim().toUpperCase();
+      if (raw === 'W' || raw === 'L' || raw === 'T') {
+        result[matchKey][g] = raw;
       }
     }
+
+    const gameCount = Object.keys(result[matchKey]).length;
+    log.push(`Row ${i}: ${dateRaw} vs #${opponentNum} → ${gameCount} results`);
   }
+
+  debugLog = log;
   return result;
 }
 
+// All Team Scores sheet columns:
+// A(0): Team#  B(1): Team Name  C(2): Captain
+// D(3): Total Wins  E(4): Total Losses  F(5): Total Ties  G(6): Win%
 function parseAllTeamScores(csvText) {
   const rows = parseCSV(csvText);
   const result = {};
-  // Skip header row
+
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
-    if (!row[0]) continue;
-    const teamNum = parseInt(row[0]);
+    if (!row || !row[0]) continue;
+    const teamNum = parseInt((row[0] || '').replace(/"/g, '').trim());
     if (isNaN(teamNum)) continue;
-    const w = parseInt(row[3]) || 0;
-    const l = parseInt(row[4]) || 0;
-    const t = parseInt(row[5]) || 0;
+    const w = parseInt((row[3] || '').replace(/"/g, '').trim()) || 0;
+    const l = parseInt((row[4] || '').replace(/"/g, '').trim()) || 0;
+    const t = parseInt((row[5] || '').replace(/"/g, '').trim()) || 0;
     result[teamNum] = { w, l, t };
   }
+
   return result;
 }
 
@@ -622,25 +661,32 @@ function setLoadingBar(state) {
 async function loadFromSheets() {
   setLoadingBar('active');
   try {
+    const ts = Date.now();
     const [clResp, atResp] = await Promise.all([
-      fetch(CANLIFT_CSV_URL + '&t=' + Date.now()),
-      fetch(ALL_TEAMS_CSV_URL + '&t=' + Date.now())
+      fetch(CANLIFT_CSV_URL + ts),
+      fetch(ALL_TEAMS_CSV_URL + ts)
     ]);
 
-    if (!clResp.ok || !atResp.ok) throw new Error('Sheet fetch failed');
+    if (!clResp.ok || !atResp.ok) throw new Error(`HTTP error: CL=${clResp.status} AT=${atResp.status}`);
 
     const [clText, atText] = await Promise.all([clResp.text(), atResp.text()]);
 
     scores = parseCanLiftScores(clText);
     allTeamScores = parseAllTeamScores(atText);
-    dataFromSheet = true;
+
+    // Show debug info
+    const dbg = document.getElementById('debugInfo');
+    dbg.innerHTML = debugLog.join('<br>');
+    // dbg.classList.add('show'); // Uncomment to show debug panel
 
     // Cache to db
-    await window.db.set(DB_KEY, {
-      scores,
-      allTeamScores,
-      savedAt: new Date().toISOString()
-    });
+    try {
+      await window.db.set(DB_KEY, {
+        scores,
+        allTeamScores,
+        savedAt: new Date().toISOString()
+      });
+    } catch(e) {}
 
     document.getElementById('errorBanner').classList.remove('show');
     lastRefreshed = new Date();
@@ -669,14 +715,16 @@ async function loadFromCache() {
 }
 
 async function loadData() {
+  // Show cached data immediately
+  const cacheOk = await loadFromCache();
+  if (cacheOk) updateAllDisplays();
+
+  // Then fetch fresh
   const sheetOk = await loadFromSheets();
-  if (!sheetOk) {
-    const cacheOk = await loadFromCache();
-    if (!cacheOk) {
-      document.getElementById('errorBanner').classList.add('show');
-    } else {
-      document.getElementById('errorBanner').classList.add('show');
-    }
+  if (sheetOk) {
+    updateAllDisplays();
+  } else if (!cacheOk) {
+    document.getElementById('errorBanner').classList.add('show');
   }
 }
 
@@ -686,7 +734,8 @@ async function manualRefresh() {
   if (ok) {
     updateAllDisplays();
   } else {
-    document.getElementById('lastRefreshedText').textContent = 'Refresh failed';
+    document.getElementById('errorBanner').classList.add('show');
+    updateRefreshedLabel();
   }
 }
 
@@ -703,8 +752,7 @@ function parseDate(dateStr) {
 }
 
 function isPast(dateStr) {
-  const today = new Date();
-  return parseDate(dateStr) < today;
+  return parseDate(dateStr) < new Date();
 }
 
 function getCanLiftMatches() {
@@ -754,17 +802,14 @@ function getOverallWLT() {
   return { w, l, t };
 }
 
-// Get team's W count for display on schedule (from allTeamScores or derived)
 function getTeamWinsForSchedule(teamNum) {
   if (isCanLift(teamNum)) {
-    const { w } = getOverallWLT();
-    return w;
+    return getOverallWLT().w;
   }
-  // From allTeamScores sheet if available
   if (allTeamScores[teamNum] !== undefined) {
     return allTeamScores[teamNum].w;
   }
-  // Fallback: derive from CanLift match scores
+  // Derive from match scores
   let w = 0;
   getCanLiftMatches().forEach(({ date, opponent }) => {
     if (opponent === teamNum) {
@@ -780,8 +825,7 @@ function getMatchTiesForPair(date, t1, t2) {
   if (!isCanLift(t1) && !isCanLift(t2)) return 0;
   const oppNum = isCanLift(t1) ? t2 : t1;
   const mk = `${date}_${oppNum}`;
-  const { t } = getMatchWLT(mk);
-  return t;
+  return getMatchWLT(mk).t;
 }
 
 // ============================================================
@@ -920,7 +964,6 @@ function renderTeams(filter = '') {
     let pctHtml = '<span class="dash">—</span>';
 
     if (isOpp) {
-      // Use allTeamScores if available, else derive from match scores
       let w = 0, l = 0, ties = 0;
       if (allTeamScores[t.number] !== undefined) {
         w = allTeamScores[t.number].w;
@@ -1054,12 +1097,12 @@ setInterval(updateRefreshedLabel, 60000);
 // ============================================================
 async function init() {
   buildDateSelector();
-  // Load cached data first for instant display
-  await loadFromCache();
-  updateAllDisplays();
-  // Then fetch fresh from Google Sheets
-  const ok = await loadFromSheets();
-  if (ok) updateAllDisplays();
+  renderSchedule();
+  renderTeams();
+  renderCanLiftSchedule();
+  renderNextMatch();
+  updateQuickSummary();
+  await loadData();
 }
 
 init();
