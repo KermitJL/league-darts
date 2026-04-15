@@ -110,6 +110,7 @@
   .date-btn.active { background: var(--cl-dark); color: white; border-color: var(--cl-dark); }
   .date-btn:hover:not(.active) { border-color: var(--cl-red); color: var(--cl-red); }
   .date-btn.past { opacity: 0.5; }
+  .date-btn.today { border-color: var(--cl-red); }
 
   .schedule-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
   .match-card {
@@ -259,6 +260,7 @@
     gap: 16px;
   }
   .schedule-item.past { opacity: 0.65; }
+  .schedule-item.today-match { border: 2px solid var(--cl-red); }
   .date-block {
     text-align: center;
     min-width: 64px;
@@ -271,6 +273,7 @@
   .date-block .day { font-size: 1.3rem; font-weight: 800; }
   .date-block .month { font-size: 0.65rem; font-weight: 600; text-transform: uppercase; }
   .schedule-item.past .date-block { background: var(--muted); }
+  .schedule-item.today-match .date-block { background: var(--cl-red); }
 
   .match-info { flex: 1; }
   .match-info .opponent { font-size: 0.95rem; font-weight: 700; }
@@ -379,18 +382,18 @@
   }
   .error-banner.show { display: block; }
 
-  .debug-info {
-    background: #f8f8f8;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 10px 14px;
-    font-size: 0.72rem;
-    color: #666;
-    margin-bottom: 12px;
-    font-family: monospace;
-    display: none;
+  .today-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    background: var(--cl-red);
+    color: white;
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-left: 6px;
+    vertical-align: middle;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
-  .debug-info.show { display: block; }
 </style>
 </head>
 <body>
@@ -465,8 +468,6 @@
       ⚠️ Could not load data from Google Sheets. Showing cached data if available. Try the refresh button (↻) above.
     </div>
 
-    <div class="debug-info" id="debugInfo"></div>
-
     <div class="data-source-note">
       📊 Scores loaded from <a href="https://docs.google.com/spreadsheets/d/1PmQlXxTHT3ZtgWXLS-ZrfQ20CEHEbkTeDHq5htY6Tkw/edit" target="_blank">Google Sheets</a> · Updated weekly after each match night
     </div>
@@ -492,9 +493,8 @@
 const SHEET_ID = "1PmQlXxTHT3ZtgWXLS-ZrfQ20CEHEbkTeDHq5htY6Tkw";
 const CANLIFT_SHEET_NAME = "CanLift Scores";
 const ALL_TEAMS_SHEET_NAME = "All Team Scores";
-const DB_KEY = "canlift_scores_2026_v3";
+const DB_KEY = "canlift_scores_2026_v4";
 
-// Use the gviz CSV export — works for publicly shared sheets
 const CANLIFT_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(CANLIFT_SHEET_NAME)}&t=`;
 const ALL_TEAMS_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(ALL_TEAMS_SHEET_NAME)}&t=`;
 
@@ -553,13 +553,38 @@ const CANLIFT_NUM = 21;
 // ============================================================
 // STATE
 // ============================================================
-let scores = {};         // { "09-Apr-26_6": { 0: "L", 1: "L", ... } }
-let allTeamScores = {};  // { teamNum: { w, l, t } }
+let scores = {};
+let allTeamScores = {};
 let lastRefreshed = null;
-let debugLog = [];
 
 // ============================================================
-// CSV PARSING — robust quoted-field parser
+// DATE HELPERS — KEY FIX: today is NOT past, only strictly before today is past
+// ============================================================
+function parseDate(dateStr) {
+  const parts = dateStr.split('-');
+  const months = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+  return new Date(parseInt('20'+parts[2]), months[parts[1]], parseInt(parts[0]));
+}
+
+function getTodayMidnight() {
+  const t = new Date();
+  return new Date(t.getFullYear(), t.getMonth(), t.getDate());
+}
+
+// A date is "past" only if it is BEFORE today (not today itself)
+function isPast(dateStr) {
+  return parseDate(dateStr) < getTodayMidnight();
+}
+
+// A date is "today" if it matches today's date exactly
+function isToday(dateStr) {
+  const d = parseDate(dateStr);
+  const t = getTodayMidnight();
+  return d.getTime() === t.getTime();
+}
+
+// ============================================================
+// CSV PARSING
 // ============================================================
 function parseCSVLine(line) {
   const cols = [];
@@ -584,55 +609,32 @@ function parseCSV(text) {
   return text.split('\n').filter(l => l.trim()).map(parseCSVLine);
 }
 
-// CanLift Scores sheet columns:
-// A(0): Date  B(1): Opponent#  C(2): Opponent Name  D(3): Board
-// E(4): Cricket  F(5): Cricket  G(6): 301  H(7): 501  I(8): Baseball
-// J(9): Night Record (formula)
 function parseCanLiftScores(csvText) {
   const rows = parseCSV(csvText);
   const result = {};
-  const log = [];
-
-  log.push(`Total rows (incl header): ${rows.length}`);
-
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     if (!row || row.length < 5) continue;
-
     const dateRaw = (row[0] || '').replace(/"/g, '').trim();
     const oppRaw = (row[1] || '').replace(/"/g, '').trim();
-
     if (!dateRaw || !oppRaw) continue;
-
     const opponentNum = parseInt(oppRaw);
     if (isNaN(opponentNum)) continue;
-
     const matchKey = `${dateRaw}_${opponentNum}`;
     result[matchKey] = {};
-
-    // Game results in columns E-I (indices 4-8)
     for (let g = 0; g < 5; g++) {
       const raw = (row[4 + g] || '').replace(/"/g, '').trim().toUpperCase();
       if (raw === 'W' || raw === 'L' || raw === 'T') {
         result[matchKey][g] = raw;
       }
     }
-
-    const gameCount = Object.keys(result[matchKey]).length;
-    log.push(`Row ${i}: ${dateRaw} vs #${opponentNum} → ${gameCount} results`);
   }
-
-  debugLog = log;
   return result;
 }
 
-// All Team Scores sheet columns:
-// A(0): Team#  B(1): Team Name  C(2): Captain
-// D(3): Total Wins  E(4): Total Losses  F(5): Total Ties  G(6): Win%
 function parseAllTeamScores(csvText) {
   const rows = parseCSV(csvText);
   const result = {};
-
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     if (!row || !row[0]) continue;
@@ -643,7 +645,6 @@ function parseAllTeamScores(csvText) {
     const t = parseInt((row[5] || '').replace(/"/g, '').trim()) || 0;
     result[teamNum] = { w, l, t };
   }
-
   return result;
 }
 
@@ -666,28 +667,13 @@ async function loadFromSheets() {
       fetch(CANLIFT_CSV_URL + ts),
       fetch(ALL_TEAMS_CSV_URL + ts)
     ]);
-
-    if (!clResp.ok || !atResp.ok) throw new Error(`HTTP error: CL=${clResp.status} AT=${atResp.status}`);
-
+    if (!clResp.ok || !atResp.ok) throw new Error('HTTP error');
     const [clText, atText] = await Promise.all([clResp.text(), atResp.text()]);
-
     scores = parseCanLiftScores(clText);
     allTeamScores = parseAllTeamScores(atText);
-
-    // Show debug info
-    const dbg = document.getElementById('debugInfo');
-    dbg.innerHTML = debugLog.join('<br>');
-    // dbg.classList.add('show'); // Uncomment to show debug panel
-
-    // Cache to db
     try {
-      await window.db.set(DB_KEY, {
-        scores,
-        allTeamScores,
-        savedAt: new Date().toISOString()
-      });
+      await window.db.set(DB_KEY, { scores, allTeamScores, savedAt: new Date().toISOString() });
     } catch(e) {}
-
     document.getElementById('errorBanner').classList.remove('show');
     lastRefreshed = new Date();
     updateRefreshedLabel();
@@ -715,11 +701,8 @@ async function loadFromCache() {
 }
 
 async function loadData() {
-  // Show cached data immediately
   const cacheOk = await loadFromCache();
   if (cacheOk) updateAllDisplays();
-
-  // Then fetch fresh
   const sheetOk = await loadFromSheets();
   if (sheetOk) {
     updateAllDisplays();
@@ -744,16 +727,6 @@ async function manualRefresh() {
 // ============================================================
 function getTeam(num) { return TEAMS.find(t => t.number === num); }
 function isCanLift(num) { return num === CANLIFT_NUM; }
-
-function parseDate(dateStr) {
-  const parts = dateStr.split('-');
-  const months = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
-  return new Date(parseInt('20'+parts[2]), months[parts[1]], parseInt(parts[0]));
-}
-
-function isPast(dateStr) {
-  return parseDate(dateStr) < new Date();
-}
 
 function getCanLiftMatches() {
   const matches = [];
@@ -803,13 +776,8 @@ function getOverallWLT() {
 }
 
 function getTeamWinsForSchedule(teamNum) {
-  if (isCanLift(teamNum)) {
-    return getOverallWLT().w;
-  }
-  if (allTeamScores[teamNum] !== undefined) {
-    return allTeamScores[teamNum].w;
-  }
-  // Derive from match scores
+  if (isCanLift(teamNum)) return getOverallWLT().w;
+  if (allTeamScores[teamNum] !== undefined) return allTeamScores[teamNum].w;
   let w = 0;
   getCanLiftMatches().forEach(({ date, opponent }) => {
     if (opponent === teamNum) {
@@ -824,8 +792,7 @@ function getTeamWinsForSchedule(teamNum) {
 function getMatchTiesForPair(date, t1, t2) {
   if (!isCanLift(t1) && !isCanLift(t2)) return 0;
   const oppNum = isCanLift(t1) ? t2 : t1;
-  const mk = `${date}_${oppNum}`;
-  return getMatchWLT(mk).t;
+  return getMatchWLT(`${date}_${oppNum}`).t;
 }
 
 // ============================================================
@@ -858,16 +825,18 @@ function updateQuickSummary() {
 // ============================================================
 function renderNextMatch() {
   const banner = document.getElementById('nextMatchBanner');
-  const today = new Date();
+  const today = getTodayMidnight();
   const clMatches = getCanLiftMatches();
+  // Next match = today or future
   const next = clMatches.find(m => parseDate(m.date) >= today);
   if (!next) { banner.innerHTML = ''; return; }
   const opp = getTeam(next.opponent);
+  const todayFlag = isToday(next.date) ? ' <span style="font-size:0.7rem;background:rgba(255,255,255,0.25);padding:1px 7px;border-radius:10px;font-weight:700;">TONIGHT</span>' : '';
   banner.innerHTML = `
     <div class="next-match-banner">
       <div style="font-size:1.8rem;flex-shrink:0">🎯</div>
       <div>
-        <div class="nm-label">Next Match</div>
+        <div class="nm-label">Next Match${todayFlag}</div>
         <div class="nm-opp">vs. ${opp ? opp.name : 'Team '+next.opponent}</div>
         <div class="nm-details">${next.date} &nbsp;·&nbsp; Board ${next.board} &nbsp;·&nbsp; ${opp ? opp.captain : ''}</div>
       </div>
@@ -884,8 +853,14 @@ function buildDateSelector() {
   const container = document.getElementById('dateSelector');
   Object.keys(SCHEDULE).forEach(date => {
     const btn = document.createElement('button');
-    btn.className = 'date-btn' + (date === activeDate ? ' active' : '') + (isPast(date) ? ' past' : '');
-    btn.textContent = date;
+    const past = isPast(date);
+    const today = isToday(date);
+    let cls = 'date-btn';
+    if (date === activeDate) cls += ' active';
+    if (past) cls += ' past';
+    if (today) cls += ' today';
+    btn.className = cls;
+    btn.innerHTML = date + (today ? ' <span class="today-label">Today</span>' : '');
     btn.onclick = () => {
       activeDate = date;
       document.querySelectorAll('.date-btn').forEach(b => b.classList.remove('active'));
@@ -909,8 +884,7 @@ function renderSchedule() {
     let clMatchRecord = null;
     if (isClMatch) {
       const oppNum = isCanLift(t1) ? t2 : t1;
-      const mk = `${activeDate}_${oppNum}`;
-      clMatchRecord = getH2HRecord(mk);
+      clMatchRecord = getH2HRecord(`${activeDate}_${oppNum}`);
     }
 
     const t1Wins = getTeamWinsForSchedule(t1);
@@ -1016,14 +990,19 @@ function renderCanLiftSchedule() {
   clMatches.forEach(({ date, board, opponent }) => {
     const opp = getTeam(opponent);
     const past = isPast(date);
+    const today = isToday(date);
     const parts = date.split('-');
     const matchKey = `${date}_${opponent}`;
     const matchScores = getMatchScores(matchKey);
     const { w, l, t } = getMatchWLT(matchKey);
     const h2h = getH2HRecord(matchKey);
 
+    let itemClass = 'schedule-item';
+    if (past) itemClass += ' past';
+    if (today) itemClass += ' today-match';
+
     const item = document.createElement('div');
-    item.className = 'schedule-item' + (past ? ' past' : '');
+    item.className = itemClass;
     item.innerHTML = `
       <div class="date-block">
         <div class="day">${parts[0]}</div>
@@ -1033,6 +1012,7 @@ function renderCanLiftSchedule() {
         <div class="opponent">
           vs. ${opp ? opp.name : 'Team '+opponent}
           <span style="color:#aaa;font-weight:400;font-size:0.8rem">(#${opponent})</span>
+          ${today ? '<span class="today-label">Tonight!</span>' : ''}
         </div>
         <div class="details">📋 Board ${board} &nbsp;|&nbsp; 👤 ${opp ? opp.captain : ''}</div>
         <div class="${h2h ? 'h2h-badge has-record' : 'h2h-badge'}">${h2h ? 'Record: '+h2h : 'No results yet'}</div>
